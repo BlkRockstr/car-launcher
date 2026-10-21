@@ -1,0 +1,348 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0e0f12">
+<title>Car Launcher</title>
+<style>
+  :root {
+    --bg: #0e0f12;
+    --surface: #1a1d23;
+    --surface-2: #252932;
+    --text: #f2f3f5;
+    --muted: #9aa0ab;
+    --accent: #ff7a1a;
+    --danger: #e5484d;
+    --radius: 16px;
+    --tile: clamp(64px, 15vh, 92px);
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font: 15px/1.3 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  header {
+    display: flex;
+    gap: 10px;
+    padding: 10px 14px 8px;
+    flex: none;
+  }
+  form#search { flex: 1; display: flex; }
+  #q {
+    flex: 1;
+    min-width: 0;
+    height: 48px;
+    padding: 0 18px;
+    border: 0;
+    border-radius: 24px;
+    background: var(--surface);
+    color: var(--text);
+    font-size: 17px;
+    outline: none;
+    -webkit-user-select: text;
+    user-select: text;
+  }
+  #q:focus { box-shadow: 0 0 0 2px var(--accent); }
+  #q::placeholder { color: var(--muted); }
+  .btn {
+    height: 48px;
+    min-width: 48px;
+    padding: 0 16px;
+    border: 0;
+    border-radius: 24px;
+    background: var(--surface);
+    color: var(--text);
+    font: inherit;
+    font-weight: 600;
+  }
+  .btn:active { background: var(--surface-2); }
+  .btn.on { background: var(--accent); color: #1a0d00; }
+
+  main {
+    flex: 1;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    padding: 4px 14px 14px;
+  }
+  #grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(calc(var(--tile) + 22px), 1fr));
+    gap: 12px 6px;
+  }
+  .app {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 2px;
+    border: 0;
+    background: none;
+    color: var(--text);
+    font: inherit;
+    text-decoration: none;
+    border-radius: var(--radius);
+  }
+  .app:active .icon { transform: scale(0.92); }
+  .icon {
+    width: var(--tile);
+    height: var(--tile);
+    border-radius: 22%;
+    display: grid;
+    place-items: center;
+    background: var(--c, var(--surface-2));
+    color: #fff;
+    font-weight: 800;
+    font-size: calc(var(--tile) * 0.42);
+    overflow: hidden;
+    transition: transform 0.12s ease-out;
+  }
+  .icon img { width: 62%; height: 62%; object-fit: contain; }
+  .icon.has-img { background: var(--surface); }
+  .label {
+    max-width: 100%;
+    font-size: 13px;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .remove {
+    display: none;
+    position: absolute;
+    top: -2px;
+    right: calc(50% - var(--tile) / 2 - 10px);
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: var(--danger);
+    color: #fff;
+    font-size: 18px;
+    line-height: 28px;
+    text-align: center;
+    font-weight: 700;
+  }
+  body.editing .remove { display: block; }
+  body.editing .app .icon { animation: wiggle 0.3s ease-in-out infinite alternate; }
+  @keyframes wiggle { from { transform: rotate(-2deg); } to { transform: rotate(2deg); } }
+  .add-tile .icon { background: var(--surface); color: var(--accent); border: 2px dashed var(--surface-2); }
+  body:not(.editing) .add-tile { display: none; }
+
+  dialog {
+    border: 0;
+    border-radius: 20px;
+    background: var(--surface);
+    color: var(--text);
+    padding: 18px;
+    width: min(420px, 92vw);
+  }
+  dialog::backdrop { background: rgba(0, 0, 0, 0.6); }
+  dialog h2 { margin: 0 0 12px; font-size: 18px; }
+  dialog input {
+    width: 100%;
+    height: 46px;
+    margin-bottom: 10px;
+    padding: 0 14px;
+    border: 0;
+    border-radius: 12px;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 16px;
+    -webkit-user-select: text;
+    user-select: text;
+  }
+  .row { display: flex; gap: 8px; justify-content: flex-end; }
+
+  @media (prefers-reduced-motion: reduce) {
+    body.editing .app .icon { animation: none; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <form id="search" autocomplete="off">
+    <input id="q" type="search" inputmode="search" enterkeyhint="go" placeholder="Search Google or type a website">
+  </form>
+  <button class="btn" id="edit" type="button">Edit</button>
+</header>
+<main>
+  <div id="grid"></div>
+</main>
+
+<dialog id="addDialog">
+  <form method="dialog" id="addForm">
+    <h2>Add a shortcut</h2>
+    <input id="addName" placeholder="Name (e.g. Shahid)" required>
+    <input id="addUrl" placeholder="Website (e.g. shahid.mbc.net)" required inputmode="url">
+    <div class="row">
+      <button class="btn" value="cancel" formnovalidate>Cancel</button>
+      <button class="btn" id="resetBtn" type="button">Reset all</button>
+      <button class="btn on" value="ok">Add</button>
+    </div>
+  </form>
+</dialog>
+
+<script>
+  const DEFAULTS = [
+    { name: 'Google', url: 'https://www.google.com', c: '#4285f4' },
+    { name: 'YouTube', url: 'https://m.youtube.com', c: '#ff0033' },
+    { name: 'Netflix', url: 'https://www.netflix.com', c: '#e50914' },
+    { name: 'Shahid', url: 'https://shahid.mbc.net', c: '#18c27a' },
+    { name: 'OSN+', url: 'https://osnplus.com', c: '#0b0b0b' },
+    { name: 'STARZPLAY', url: 'https://starzplay.com', c: '#1b1b1b' },
+    { name: 'Prime Video', url: 'https://www.primevideo.com', c: '#1a98ff' },
+    { name: 'TikTok', url: 'https://www.tiktok.com', c: '#111' },
+    { name: 'Twitch', url: 'https://m.twitch.tv', c: '#9146ff' },
+    { name: 'Instagram', url: 'https://www.instagram.com', c: '#e1306c' },
+    { name: 'Vimeo', url: 'https://vimeo.com', c: '#1ab7ea' },
+    { name: 'Dailymotion', url: 'https://www.dailymotion.com', c: '#0d0d0d' },
+    { name: 'Max', url: 'https://play.max.com', c: '#002be7' },
+    { name: 'Paramount+', url: 'https://www.paramountplus.com', c: '#0064ff' },
+    { name: 'Peacock', url: 'https://www.peacocktv.com', c: '#111' },
+    { name: 'Crunchyroll', url: 'https://www.crunchyroll.com', c: '#f47521' },
+    { name: 'Rakuten Viki', url: 'https://www.viki.com', c: '#1d80f2' },
+    { name: 'iQIYI', url: 'https://www.iq.com', c: '#00cc36' },
+    { name: 'Plex', url: 'https://app.plex.tv', c: '#e5a00d' },
+    { name: 'Pluto TV', url: 'https://pluto.tv', c: '#2c2cff' },
+    { name: 'Tubi', url: 'https://tubitv.com', c: '#7408ff' },
+    { name: 'Anghami', url: 'https://play.anghami.com', c: '#8b2bf5' },
+  ];
+  const KEY = 'carLauncher.v1';
+
+  function load() {
+    try {
+      const saved = JSON.parse(localStorage.getItem(KEY));
+      if (Array.isArray(saved)) return saved;
+    } catch (e) {}
+    return DEFAULTS.slice();
+  }
+  function save() {
+    try { localStorage.setItem(KEY, JSON.stringify(apps)); } catch (e) {}
+  }
+
+  let apps = load();
+  const grid = document.getElementById('grid');
+
+  function normalizeUrl(text) {
+    const t = text.trim();
+    if (/^https?:\/\//i.test(t)) return t;
+    return 'https://' + t;
+  }
+  function looksLikeUrl(text) {
+    const t = text.trim();
+    return /^https?:\/\//i.test(t) || (/^[^\s]+\.[a-z]{2,}(\/\S*)?$/i.test(t));
+  }
+  function hostOf(url) {
+    try { return new URL(url).hostname; } catch (e) { return ''; }
+  }
+  function colorFor(name) {
+    let h = 0;
+    for (const ch of name) h = (h * 31 + ch.charCodeAt(0)) % 360;
+    return `hsl(${h} 55% 40%)`;
+  }
+
+  function render() {
+    grid.textContent = '';
+    apps.forEach((app, i) => {
+      const a = document.createElement('a');
+      a.className = 'app';
+      a.href = app.url;
+
+      const icon = document.createElement('span');
+      icon.className = 'icon';
+      icon.style.setProperty('--c', app.c || colorFor(app.name));
+      const letter = (app.name.trim()[0] || '?').toUpperCase();
+      const host = hostOf(app.url);
+      if (host) {
+        const img = new Image();
+        img.alt = '';
+        img.decoding = 'async';
+        img.src = `https://www.google.com/s2/favicons?domain=${encodeURIComponent(host)}&sz=128`;
+        img.onload = () => {
+          // The favicon service returns a 16px globe when it has nothing; keep the letter then.
+          if (img.naturalWidth < 32) return;
+          icon.textContent = '';
+          icon.classList.add('has-img');
+          icon.appendChild(img);
+        };
+      }
+      icon.textContent = letter;
+
+      const label = document.createElement('span');
+      label.className = 'label';
+      label.textContent = app.name;
+
+      const remove = document.createElement('span');
+      remove.className = 'remove';
+      remove.textContent = '×';
+      remove.setAttribute('aria-label', 'Remove ' + app.name);
+
+      a.append(icon, label, remove);
+      a.addEventListener('click', (e) => {
+        if (!document.body.classList.contains('editing')) return;
+        e.preventDefault();
+        apps.splice(i, 1);
+        save();
+        render();
+      });
+      grid.appendChild(a);
+    });
+
+    const add = document.createElement('button');
+    add.type = 'button';
+    add.className = 'app add-tile';
+    add.innerHTML = '<span class="icon">+</span><span class="label">Add</span>';
+    add.addEventListener('click', () => {
+      document.getElementById('addForm').reset();
+      document.getElementById('addDialog').showModal();
+    });
+    grid.appendChild(add);
+  }
+
+  document.getElementById('search').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const q = document.getElementById('q').value.trim();
+    if (!q) return;
+    location.href = looksLikeUrl(q)
+      ? normalizeUrl(q)
+      : 'https://www.google.com/search?q=' + encodeURIComponent(q);
+  });
+
+  const editBtn = document.getElementById('edit');
+  editBtn.addEventListener('click', () => {
+    const on = document.body.classList.toggle('editing');
+    editBtn.classList.toggle('on', on);
+    editBtn.textContent = on ? 'Done' : 'Edit';
+  });
+
+  const dialog = document.getElementById('addDialog');
+  dialog.addEventListener('close', () => {
+    if (dialog.returnValue !== 'ok') return;
+    const name = document.getElementById('addName').value.trim();
+    const url = document.getElementById('addUrl').value.trim();
+    if (!name || !url) return;
+    apps.push({ name, url: normalizeUrl(url) });
+    save();
+    render();
+  });
+  document.getElementById('resetBtn').addEventListener('click', () => {
+    if (!confirm('Restore the original shortcuts?')) return;
+    apps = DEFAULTS.slice();
+    save();
+    render();
+    dialog.close('cancel');
+  });
+
+  render();
+</script>
+</body>
+</html>
