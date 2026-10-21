@@ -162,6 +162,10 @@
   }
   .row { display: flex; gap: 8px; justify-content: flex-end; }
 
+  #opening { display: none; margin: auto; color: var(--muted); font-size: 17px; }
+  body.leaving header, body.leaving main { display: none; }
+  body.leaving #opening { display: block; }
+
   @media (prefers-reduced-motion: reduce) {
     body.editing .app .icon { animation: none; }
   }
@@ -177,6 +181,7 @@
 <main>
   <div id="grid"></div>
 </main>
+<p id="opening">Opening…</p>
 
 <dialog id="addDialog">
   <form method="dialog" id="addForm">
@@ -244,6 +249,25 @@
   function hostOf(url) {
     try { return new URL(url).hostname; } catch (e) { return ''; }
   }
+  // Asks sites that push their native app (YouTube) to stay on the web version.
+  function webOnly(url) {
+    try {
+      const u = new URL(url);
+      if (/(^|\.)youtube\.com$/i.test(u.hostname)) {
+        u.searchParams.set('app', 'm');
+        u.searchParams.set('persist_app', '1');
+      }
+      return u.toString();
+    } catch (e) { return url; }
+  }
+
+  // iOS hands a tapped link to the site's app (Universal Links) and leaves CarTV.
+  // Bouncing through ?go= on this page makes the final hop a script redirect,
+  // which iOS keeps inside the in-app browser.
+  function openInPlace(url) {
+    location.assign('?go=' + encodeURIComponent(webOnly(url)));
+  }
+
   function colorFor(name) {
     let h = 0;
     for (const ch of name) h = (h * 31 + ch.charCodeAt(0)) % 360;
@@ -288,8 +312,11 @@
 
       a.append(icon, label, remove);
       a.addEventListener('click', (e) => {
-        if (!document.body.classList.contains('editing')) return;
         e.preventDefault();
+        if (!document.body.classList.contains('editing')) {
+          openInPlace(app.url);
+          return;
+        }
         apps.splice(i, 1);
         save();
         render();
@@ -312,9 +339,9 @@
     e.preventDefault();
     const q = document.getElementById('q').value.trim();
     if (!q) return;
-    location.href = looksLikeUrl(q)
+    openInPlace(looksLikeUrl(q)
       ? normalizeUrl(q)
-      : 'https://www.google.com/search?q=' + encodeURIComponent(q);
+      : 'https://www.google.com/search?q=' + encodeURIComponent(q));
   });
 
   const editBtn = document.getElementById('edit');
@@ -342,7 +369,14 @@
     dialog.close('cancel');
   });
 
-  render();
+  const go = new URLSearchParams(location.search).get('go');
+  if (go && /^https?:\/\//i.test(go)) {
+    document.body.classList.add('leaving');
+    // replace() keeps this hop out of history, so Back returns to the launcher.
+    setTimeout(() => location.replace(go), 60);
+  } else {
+    render();
+  }
 </script>
 </body>
 </html>
